@@ -1,4 +1,4 @@
-# Resizing a Tinker Board 2 Android Image
+# README: Resizing a Tinker Board 2 Android Image
 
 This script is designed to shrink the user partition of an Android image for the Tinker Board 2 and remove unused space.
 
@@ -35,14 +35,64 @@ Execute the script with root privileges:
 sudo ./resize_tinker_board.sh
 ```
 
-The script follows these steps:
-1. **Preparation**: Mounts the image as a loop device.
-2. **Filesystem Check**: Checks and repairs the user partition if necessary.
-3. **Determine Target Size**: Calculates the minimum required partition size, including a configurable buffer.
-4. **Resize Filesystem**: Shrinks the filesystem accordingly.
-5. **Adjust Partition**: Resizes the partition to match the new filesystem size.
-6. **Trim Image**: Reduces the total size of the image file.
-7. **Cleanup**: Removes the loop device.
+### Script Code
+```bash
+#!/bin/bash
+# Script to resize a Tinker Board 2 Android image
+# Author: Amine Ouhamou
+
+# ************** Configuration **************
+DISK_IMAGE="in_tinker_board.img"
+TARGET_PARTITION=16  # User data partition
+SECTOR_SIZE=512      # Standard sector size (512 bytes)
+BLOCK_SIZE=4096      # ext4 block size (4 KiB)
+MIN_FREE_SPACE_MB=512  # Minimum free space in MB after resizing
+# *******************************************
+
+# Enable error handling
+set -e
+
+echo "========== Phase 1: Preparation =========="
+# Mount the image as a loop device
+LOOP_DEVICE=$(sudo losetup -f --show -P "$DISK_IMAGE")
+PARTITION="${LOOP_DEVICE}p${TARGET_PARTITION}"
+echo "Used loop device: $LOOP_DEVICE"
+echo "Target partition: $PARTITION"
+
+# Determine the start sector of the partition
+echo "Determine the start sector of the partition..."
+START_SECTOR=$(sudo parted "$LOOP_DEVICE" -ms unit s print | grep "^${TARGET_PARTITION}" | cut -d: -f2 | sed 's/s//')
+if ! [[ "$START_SECTOR" =~ ^[0-9]+$ ]]; then
+    echo "Error: Could not determine the start sector of the partition."
+    echo "Please check the partition table with 'fdisk -l' or 'parted'."
+    sudo losetup -d "$LOOP_DEVICE"
+    exit 1
+fi
+echo "Start sector of the partition: $START_SECTOR"
+
+# Check the file system type
+FS_TYPE=$(sudo blkid -o value -s TYPE "$PARTITION")
+if [ "$FS_TYPE" != "ext4" ]; then
+    echo "Unsupported file system: $FS_TYPE"
+    sudo losetup -d "$LOOP_DEVICE"
+    exit 1
+fi
+echo "File system type: $FS_TYPE"
+
+# Ensure the partition is not mounted
+if mount | grep -q "$PARTITION"; then
+    echo "Error: Partition is still mounted. Please unmount first!"
+    sudo losetup -d "$LOOP_DEVICE"
+    exit 1
+fi
+
+...
+
+# Remove the loop device
+sudo losetup -d "$LOOP_DEVICE"
+
+echo "========== Successfully completed! =========="
+```
 
 ### 4. Verify After Execution
 After successful execution, check the resized image using:
